@@ -1501,6 +1501,7 @@ function updateVoiceBtn(){
 }
 function setQuote(t){
   const q=$('#dealerQuote'); if(!q) return;
+  if(introBusy()){ q.classList.remove('show'); q.textContent=''; return; }
   q.classList.toggle('long',String(t).length>60); q.classList.remove('show'); q.textContent='\u201C'+String(t).replace(/\s*\n\s*/g,', ')+'\u201D';
   void q.offsetWidth; q.classList.add('show');
 }
@@ -1509,7 +1510,16 @@ function statusWord(t){
   if(phase==='idle') return ready?'Place bets':'Ready';
   return settled?'Results':'Go';
 }
+let dsTok=0;
+function introBusy(){ var r=document.documentElement; return !!(document.getElementById('fiov')||document.getElementById('rbov')||document.getElementById('introov')||/\b(fiing|rbing|introing)\b/.test(r.className)); }
 function dealerSay(text,why,speech,quote,urgent){
+  /* no talking and no speech-bubble text during the opening show: wait until it is over, then a short pause; only the newest line is said */
+  if(introBusy()){
+    const my=++dsTok, args=arguments;
+    return new Promise(function(res){
+      (function wait(){ if(my!==dsTok){ res(); return; } if(introBusy()){ setTimeout(wait,120); return; } setTimeout(function(){ if(my!==dsTok){ res(); return; } res(dealerSay.apply(null,args)); },900); })();
+    });
+  }
   setQuote(quote||text);
   { const sw=statusWord(String(text)); $('#dealerSay').textContent=((wnKeep&&(sw==='Go'||sw==='Results'))?wnKeep:(sw==='Go'?'':sw)).replace(/^(\d+(?:st|nd|rd|th) card!)\s+/,'$1\n'); }   // "1st card!" and the answer on two lines   // no "Go" in the yellow status text $('#dealerWhy').textContent=why||'';
   const sr=$('#sr'); if(sr) sr.textContent=String(quote||text).replace(/\s*\n\s*/g,', ')+(why?'. '+why:'');
@@ -1814,6 +1824,7 @@ function openDev(){
   if(factShow('intro')){ const tok=++factTok; Promise.all([sp,new Promise(r=>setTimeout(r,D))]).then(()=>{ if(tok===factTok) factClose(); }); }
 }
 $('#devBtn').addEventListener('click',openDev);
+window.__ccReadySay=function(){ if(phase==='idle'&&!ready&&!introBusy()) dealerSay('Please, hit Ready','Press Ready when you want to place the next bets.'); };
 function dealerReady(first){ dealerSay('Please, hit Ready','Press Ready when you want to place the next bets.'); $('#dealerSay').textContent='Ready'; }   // the yellow text stays READY until Ready is pressed
 
 function signName(id){ const b=BY[id]; return b?b.label:''; }
@@ -2667,6 +2678,7 @@ function layout(){
 /* ----- speech queue: lines wait for the previous line to finish, unless they must cut in ----- */
 let spTail=Promise.resolve(), spPending=0, spGen=0;
 function speak(parts,mode){   // mode 'urgent' cuts off whatever is talking; 'optional' is dropped when the dealer is busy
+  if(introBusy()) return Promise.resolve();
   if(TEST) return Promise.resolve();
   if(!canSpeak||!voiceOn||!window.__ccMaster) return Promise.resolve();
   if(mode==='optional'&&spPending>0) return Promise.resolve();
@@ -3165,7 +3177,10 @@ function flyFactPop(){
   popAnim.onfinish=function(){ popAnim=null; factPop.hidden=true; document.body.classList.remove('fpflying'); };
 }
 factPop.addEventListener('click',()=>{ stopFactPop(); const fb=$('#factBtn'); if(fb&&!fb.disabled) fb.click(); });
+let ptWas=false;
 function promptTick(){
+  if(introBusy()){ ptWas=true; setTimeout(promptTick,150); return; }
+  if(ptWas){ ptWas=false; setTimeout(promptTick,900); return; }   /* opening show over: a short pause, then the first prompt */
   const btn=$('#ready'), stg=document.getElementById('stage'); let next=1000;
   const act=phase==='idle'&&!ready&&!document.hidden;
   if(!act){ btn.classList.remove('nudge'); rdyFlip=false; pIdx=0; pCycle=0; stopFactPop(); }
@@ -3484,7 +3499,8 @@ body.phone #howBtn{order:1}body.phone #payBtn{order:2}body.phone #factBtn{order:
         var o=a.createOscillator(), g=a.createGain(), t=a.currentTime; o.type='sine'; o.frequency.setValueAtTime(660,t); o.frequency.exponentialRampToValueAtTime(990,t+.12);
         g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(.12,t+.02); g.gain.exponentialRampToValueAtTime(.0001,t+.22); o.connect(g); g.connect(a.destination); o.start(t); o.stop(t+.25); }catch(e){} }
     try{ if(window.speechSynthesis) speechSynthesis.resume(); if(typeof window.__ccSayNow==='function') window.__ccSayNow('Sound on'); }catch(e){}
-    setTimeout(function(){ if(!on) return; var n=0; try{ n=speechSynthesis.getVoices().length; }catch(e){} var st='none'; try{ st=window.__ccAcState(); }catch(e){} toast((window.__ccSpeechOK?'Voice started':'Voice did NOT start ('+(window.__ccSpeechErr||(n?'no sound started':'no voices installed'))+')')+' | voice: '+(window.__ccVoiceName||'-')+' | voices: '+n+' | tries: '+(window.__ccTry||0)+' | speaking:'+(function(){try{return speechSynthesis.speaking+'/'+speechSynthesis.pending+'/'+speechSynthesis.paused}catch(e){return '?'}})()+' | iframe:'+(window.top!==window)+' | game speech q/started: '+(window.__ccGQ||0)+'/'+(window.__ccGS||0)+(window.__ccGE?' err:'+window.__ccGE:'')+' | audio: '+st+' | build 1102e'); },7000);   /* testing aid: set to remove when the voice works everywhere */
+    setTimeout(function(){ try{ if(on&&window.__ccReadySay) window.__ccReadySay(); }catch(e){} },1800);   /* sound just switched on: the dealer says the current prompt, so it is audible without playing a round first */
+    var diag=function(){ if(!on) return; var n=0; try{ n=speechSynthesis.getVoices().length; }catch(e){} var st='none'; try{ st=window.__ccAcState(); }catch(e){} toast((window.__ccSpeechOK?'Voice started':'Voice did NOT start ('+(window.__ccSpeechErr||(n?'no sound started':'no voices installed'))+')')+' | voice: '+(window.__ccVoiceName||'-')+' | voices: '+n+' | tries: '+(window.__ccTry||0)+' | speaking:'+(function(){try{return speechSynthesis.speaking+'/'+speechSynthesis.pending+'/'+speechSynthesis.paused}catch(e){return '?'}})()+' | iframe:'+(window.top!==window)+' | game speech q/started: '+(window.__ccGQ||0)+'/'+(window.__ccGS||0)+(window.__ccGE?' err:'+window.__ccGE:'')+' | audio: '+st+' | build 1102g'); }; setTimeout(diag,7000); setTimeout(diag,26000);   /* testing aid: set to remove when the voice works everywhere */
     if(!session()&&!silentEl){ try{ silentEl=document.createElement('audio'); silentEl.setAttribute('playsinline',''); silentEl.loop=true; silentEl.src=SIL; silentEl.volume=0.02; var p=silentEl.play(); if(p&&p.catch) p.catch(function(){ silentEl=null; }); }catch(e){ silentEl=null; } }
     else if(silentEl){ try{ silentEl.play(); }catch(e){} }
   }
