@@ -14,6 +14,13 @@ body.phone header.top{max-width:100%;contain:inline-size}
 body.phone .brand,body.phone .brand>div{min-width:0;max-width:100%}
 body.phone .brand>div{overflow:hidden}
 </style>
+<style id="width-guard">
+/* the game area decides the width of the page; nothing in the header may be wider than it, and phones must not inflate the text */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;overflow-x:clip}
+body.phone{max-width:100%;overflow-x:clip}
+body.phone header.top,body.phone .brand,body.phone .brand>div,body.phone h1,body.phone .tag{max-width:100%;min-width:0}
+body.phone h1,body.phone .tag{overflow:hidden;text-overflow:clip}
+</style>
 </head><body>
 <title>RollBall_Mobile_NOW</title>
 <style id="embedded-fonts">
@@ -2220,7 +2227,10 @@ async function askHalf(i,my){
 async function sevenIntro(my){
   const on=()=>my===introTok&&phase==='idle'&&ready;
   const hub=()=>$$('#board .tile.hubtile'), sv=id=>$$('#board .tile.spoke7[data-bet="'+id+'"]');
-  const pop=(els,ms)=>{ els.forEach(e=>{ e.style.transformBox='fill-box'; e.style.transformOrigin='center'; if(!skip&&e.animate){ const up={transform:'scale(1.5)',filter:'drop-shadow(0 6px 6px rgba(0,0,0,.65))'}; e.animate([{transform:'scale(1)',filter:'none'},Object.assign({offset:.3},up),Object.assign({offset:.8},up),{transform:'scale(1)',filter:'none'}],{duration:ms,easing:'ease-in-out'}); } e.classList.add('tourhl'); setTimeout(()=>e.classList.remove('tourhl'),ms); }); };
+  const pop=(els,ms)=>{ els.slice().sort((x,y)=>(x.classList.contains('hubtile')?1:0)-(y.classList.contains('hubtile')?1:0)).forEach(e=>{ if(e.parentNode) e.parentNode.appendChild(e); });   /* the growing pieces lie on top of the sectors beside them, the hub on top of everything */
+  $$('#board .tile.hubtile').forEach(h=>{ if(h.parentNode&&h.parentNode.lastElementChild!==h) h.parentNode.appendChild(h); });   /* ...also when only a seven grows: it never covers the Any Seven hub */
+  els.forEach(e=>{ e.style.transformBox='fill-box'; e.style.transformOrigin='center';
+ if(!skip&&e.animate){ const up={transform:'scale(1.5)',filter:'drop-shadow(0 6px 6px rgba(0,0,0,.65))'}; e.animate([{transform:'scale(1)',filter:'none'},Object.assign({offset:.3},up),Object.assign({offset:.8},up),{transform:'scale(1)',filter:'none'}],{duration:ms,easing:'ease-in-out'}); } e.classList.add('tourhl'); setTimeout(()=>e.classList.remove('tourhl'),ms); }); };
   const say=(yellow,text)=>dealerSay(yellow,'',[[text.replace(/\u2014/g,', '),.85,1.08]],text);
   let sp=say('SEVENS','You can bet on Sevens!');
   pop(hub().concat(['h7','s7','d7','c7'].reduce((a,id)=>a.concat(sv(id)),[])),1700);
@@ -3678,6 +3688,35 @@ body.phone #howBtn{order:1}body.phone #payBtn{order:2}body.phone #factBtn{order:
   window.addEventListener('resize',fit); window.addEventListener('orientationchange',function(){ setTimeout(fit,200); });
   try{ document.fonts.ready.then(fit); }catch(e){}
   setTimeout(fit,300); setTimeout(fit,1500);
+})();
+</script>
+<script id="head-guard">
+/* safety net: if the name or the tagline is still wider than the game area, the fonts shrink until both fit */
+(function(){
+  var busy=false;
+  function guard(){
+    if(busy) return; busy=true;
+    try{
+      var b=document.body; if(!b.classList.contains('phone')) return;
+      var h=document.getElementById('gameName'), tg=document.querySelector('.tag'), st=document.getElementById('stage'); if(!h||!tg||!st) return;
+      var br=document.querySelector('.brand'), lg=document.getElementById('logo'), lw=0;
+      if(lg&&getComputedStyle(lg).display!=='none') lw=lg.getBoundingClientRect().width;
+      var cw=Math.min((br?br.clientWidth:1e9)-lw-(br?(parseFloat(getComputedStyle(br).columnGap)||0):0), st.clientWidth||1e9); if(!(cw>20)||cw>5000) return;
+      var rg=document.createRange(), wid=function(el){ rg.selectNodeContents(el); return rg.getBoundingClientRect().width; };
+      for(var i=0;i<10;i++){
+        var w1=wid(h), w2=wid(tg); if(w1<=cw-2&&w2<=cw-2) break;
+        var k=Math.min((cw-4)/Math.max(w1,1),(cw-4)/Math.max(w2,1))*.98;
+        var hf=parseFloat(getComputedStyle(h).fontSize)*k, tf=parseFloat(getComputedStyle(tg).fontSize)*k;
+        b.style.setProperty('--hfs',hf.toFixed(2)+'px'); b.style.setProperty('--htg',tf.toFixed(2)+'px');
+      }
+    }catch(e){} finally{ busy=false; }
+  }
+  window.__ccGuardHead=guard;
+  var later=function(){ setTimeout(guard,60); };
+  window.addEventListener('resize',later); window.addEventListener('orientationchange',function(){ setTimeout(guard,250); });
+  try{ new ResizeObserver(later).observe(document.getElementById('stage')); }catch(e){}
+  try{ document.fonts.ready.then(later); }catch(e){}
+  [400,1200,3000,6000].forEach(function(t){ setTimeout(guard,t); });
 })();
 </script>
 </body></html>
